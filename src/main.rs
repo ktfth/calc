@@ -1,6 +1,15 @@
-use nom::{IResult, combinator::{map}, sequence::{delimited}, bytes::complete::{tag, take_while}, character::complete::{digit1, alpha1}, multi::fold_many0, branch::alt};
-
-use nom::character::complete::char;
+use nom::{
+    branch::alt,
+    bytes::{
+        complete::{tag},
+    },
+    character::complete::{alpha1, digit1},
+    combinator::map,
+    multi::fold_many0,
+    sequence::delimited,
+    IResult,
+};
+use parse_hyperlinks::take_until_unbalanced;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ExprFragment {
@@ -25,21 +34,24 @@ fn parse_expr(input: &str) -> IResult<&str, ExprFragment> {
         map(tag(")"), |_| ExprFragment::RParen),
         map(tag(" "), |_| ExprFragment::WS),
         map(alpha1, |_| ExprFragment::WS),
-        map(digit1, |value: &str| ExprFragment::Value(value.parse::<i32>().unwrap()))),
-    )(input)
+        map(digit1, |value: &str| {
+            ExprFragment::Value(value.parse::<i32>().unwrap())
+        }),
+    ))(input)
 }
 
 fn parse_fragment(input: &str) -> IResult<&str, ExprFragment> {
     alt((
         map(
             delimited(
-                char('('),
-                take_while(|c: char| c != ')'),
-                char(')'),
+                tag("("),
+                take_until_unbalanced('(', ')'),
+                tag(")"),
             ),
             |expr: &str| {
                 let mut treated_input = expr.to_string();
-                let mut parens = treated_input.matches("(").count() - treated_input.matches(")").count();
+                let mut parens =
+                    treated_input.matches("(").count() - treated_input.matches(")").count();
                 while parens > 0 {
                     treated_input = format!("{})", treated_input);
                     parens -= 1;
@@ -49,15 +61,13 @@ fn parse_fragment(input: &str) -> IResult<&str, ExprFragment> {
                     ExprFragment::Value(_) => {
                         let interpreted_expr = interpret(&treated_input);
                         ExprFragment::Value(interpreted_expr)
-                    },
-                    _ => ExprFragment::Precedence(expr.to_string())
+                    }
+                    _ => ExprFragment::Precedence(expr.to_string()),
                 }
             },
         ),
-        map(parse_expr, |expr| {
-            expr
-        }))
-    )(input)
+        map(parse_expr, |expr| expr),
+    ))(input)
 }
 
 #[derive(Debug)]
@@ -73,34 +83,30 @@ enum NodeType {
 type Ast = Vec<NodeType>;
 
 fn parser(input: &str) -> IResult<&str, Ast> {
-    let mut build_expression = fold_many0(
-        parse_fragment,
-        Vec::new,
-        |mut acc, fragment| {
-            match fragment {
-                ExprFragment::Precedence(expr) => {
-                    acc.push(NodeType::Precedence(expr));
-                },
-                ExprFragment::Value(value) => {
-                    acc.push(NodeType::Value(value));
-                },
-                ExprFragment::Plus => {
-                    acc.push(NodeType::Plus);
-                },
-                ExprFragment::Minus => {
-                    acc.push(NodeType::Minus);
-                },
-                ExprFragment::Multiply => {
-                    acc.push(NodeType::Multiply);
-                },
-                ExprFragment::Divide => {
-                    acc.push(NodeType::Divide);
-                },
-                ExprFragment::WS | ExprFragment::LParen | ExprFragment::RParen => {},
-            };
-            acc
-        },
-    );
+    let mut build_expression = fold_many0(parse_fragment, Vec::new, |mut acc, fragment| {
+        match fragment {
+            ExprFragment::Precedence(expr) => {
+                acc.push(NodeType::Precedence(expr));
+            }
+            ExprFragment::Value(value) => {
+                acc.push(NodeType::Value(value));
+            }
+            ExprFragment::Multiply => {
+                acc.push(NodeType::Multiply);
+            }
+            ExprFragment::Divide => {
+                acc.push(NodeType::Divide);
+            }
+            ExprFragment::Plus => {
+                acc.push(NodeType::Plus);
+            }
+            ExprFragment::Minus => {
+                acc.push(NodeType::Minus);
+            }
+            ExprFragment::WS | ExprFragment::LParen | ExprFragment::RParen => {}
+        };
+        acc
+    });
     build_expression(input)
 }
 
@@ -108,18 +114,18 @@ fn calculate(out: &mut i32, value: i32, nodes: &Ast, i: usize) -> i32 {
     if i > 0 {
         let previous_node = &nodes[i - 1];
         match previous_node {
-            NodeType::Plus => {
-                *out += value;
-            },
-            NodeType::Minus => {
-                *out -= value;
-            },
             NodeType::Multiply => {
                 *out *= value;
-            },
+            }
             NodeType::Divide => {
                 *out /= value;
-            },
+            }
+            NodeType::Plus => {
+                *out += value;
+            }
+            NodeType::Minus => {
+                *out -= value;
+            }
             _ => {}
         }
     } else {
@@ -139,35 +145,45 @@ fn render(result: IResult<&str, Ast>) -> i32 {
                     NodeType::Precedence(expr) => {
                         let interpreted_expr = interpret(expr);
                         out = calculate(&mut out, interpreted_expr, &nodes, i);
-                    },
+                    }
                     NodeType::Value(value) => {
                         out = calculate(&mut out, *value, &nodes, i);
-                    },
+                    }
                     _ => {}
                 }
             }
-        },
+        }
         Err(_) => out = 0,
     };
     out
 }
 
-fn interpret(input: &str) -> i32 {
-    let mut treated_input: String = input.to_string();
-    if treated_input.contains("(") && treated_input.contains(")") {
-        let first_lparen = input.find("(").unwrap();
-        let first_rparen = input.rfind(")").unwrap();
-        let preceded_input = &input[first_lparen..first_rparen + 1];
-        let first_result = render(parser(preceded_input));
-        let sealed_input = input.replace(preceded_input, "");
-        treated_input = format!("{}({})", sealed_input, first_result);
-    
-        let result = parser(&treated_input);
-        
-        render(result)
-    } else {
-        render(parser(input))
+fn extract_precedence(input: &str) -> String {
+    let first_lparen = input.find("(").unwrap();
+    let first_rparen = input.rfind(")").unwrap();
+    let preceded_input = &input[first_lparen..first_rparen + 1];
+    preceded_input.to_string()
+}
+
+fn has_parens(input: &str) -> bool {
+    input.contains("(") && input.contains(")")
+}
+
+fn preceded_results(input: &str) -> String {
+    let mut treated_input = input.to_string();
+    while has_parens(&treated_input) {
+        let preceded_input = extract_precedence(&treated_input);
+        let parsed = parser(&preceded_input);
+        let result = render(parsed);
+        treated_input = treated_input.replace(&preceded_input, &result.to_string());
     }
+    treated_input
+}
+
+fn interpret(input: &str) -> i32 {
+    let treated_input: String = preceded_results(input);
+    let result = parser(&treated_input);
+    render(result)
 }
 
 fn main() {
