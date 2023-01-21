@@ -1,19 +1,12 @@
 use nom::{
-    branch::alt,
-    bytes::{
-        complete::{tag},
-    },
-    character::complete::{alpha1, digit1},
-    combinator::map,
-    multi::fold_many0,
-    sequence::delimited,
-    IResult,
+    branch::alt, bytes::complete::tag, character::complete::alpha1, combinator::map,
+    multi::fold_many0, number::complete::recognize_float, sequence::delimited, IResult,
 };
 use parse_hyperlinks::take_until_unbalanced;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 enum ExprFragment {
-    Value(i32),
+    Value(f32),
     Plus,
     Minus,
     Multiply,
@@ -25,6 +18,7 @@ enum ExprFragment {
 }
 
 fn parse_expr(input: &str) -> IResult<&str, ExprFragment> {
+    let parser_float = |s| recognize_float(s);
     alt((
         map(tag("*"), |_| ExprFragment::Multiply),
         map(tag("/"), |_| ExprFragment::Divide),
@@ -34,8 +28,8 @@ fn parse_expr(input: &str) -> IResult<&str, ExprFragment> {
         map(tag(")"), |_| ExprFragment::RParen),
         map(tag(" "), |_| ExprFragment::WS),
         map(alpha1, |_| ExprFragment::WS),
-        map(digit1, |value: &str| {
-            ExprFragment::Value(value.parse::<i32>().unwrap())
+        map(parser_float, |value: &str| {
+            ExprFragment::Value(value.parse::<f32>().unwrap())
         }),
     ))(input)
 }
@@ -43,11 +37,7 @@ fn parse_expr(input: &str) -> IResult<&str, ExprFragment> {
 fn parse_fragment(input: &str) -> IResult<&str, ExprFragment> {
     alt((
         map(
-            delimited(
-                tag("("),
-                take_until_unbalanced('(', ')'),
-                tag(")"),
-            ),
+            delimited(tag("("), take_until_unbalanced('(', ')'), tag(")")),
             |expr: &str| {
                 let mut treated_input = expr.to_string();
                 let mut parens =
@@ -77,7 +67,7 @@ enum NodeType {
     Multiply,
     Divide,
     Precedence(String),
-    Value(i32),
+    Value(f32),
 }
 
 type Ast = Vec<NodeType>;
@@ -110,7 +100,7 @@ fn parser(input: &str) -> IResult<&str, Ast> {
     build_expression(input)
 }
 
-fn calculate(out: &mut i32, value: i32, nodes: &Ast, i: usize) -> i32 {
+fn calculate(out: &mut f32, value: f32, nodes: &Ast, i: usize) -> f32 {
     if i > 0 {
         let previous_node = &nodes[i - 1];
         match previous_node {
@@ -134,8 +124,8 @@ fn calculate(out: &mut i32, value: i32, nodes: &Ast, i: usize) -> i32 {
     *out
 }
 
-fn render(result: IResult<&str, Ast>) -> i32 {
-    let mut out = 0;
+fn render(result: IResult<&str, Ast>) -> f32 {
+    let mut out = 0.0;
     match result {
         Ok((_, nodes)) => {
             for (i, _) in nodes.iter().enumerate() {
@@ -153,12 +143,12 @@ fn render(result: IResult<&str, Ast>) -> i32 {
                 }
             }
         }
-        Err(_) => out = 0,
+        Err(_) => out = 0.0,
     };
     out
 }
 
-fn interpret(input: &str) -> i32 {
+fn interpret(input: &str) -> f32 {
     let result = parser(input);
     render(result)
 }
