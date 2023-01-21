@@ -158,31 +158,8 @@ fn render(result: IResult<&str, Ast>) -> i32 {
     out
 }
 
-fn extract_precedence(input: &str) -> String {
-    let first_lparen = input.find("(").unwrap();
-    let first_rparen = input.rfind(")").unwrap();
-    let preceded_input = &input[first_lparen..first_rparen + 1];
-    preceded_input.to_string()
-}
-
-fn has_parens(input: &str) -> bool {
-    input.contains("(") && input.contains(")")
-}
-
-fn preceded_results(input: &str) -> String {
-    let mut treated_input = input.to_string();
-    while has_parens(&treated_input) {
-        let preceded_input = extract_precedence(&treated_input);
-        let parsed = parser(&preceded_input);
-        let result = render(parsed);
-        treated_input = treated_input.replace(&preceded_input, &result.to_string());
-    }
-    treated_input
-}
-
 fn interpret(input: &str) -> i32 {
-    let treated_input: String = preceded_results(input);
-    let result = parser(&treated_input);
+    let result = parser(input);
     render(result)
 }
 
