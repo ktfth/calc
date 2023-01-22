@@ -33,12 +33,52 @@
       margin: 1rem 0;
       width: 10rem;
     }
+
+    .pad-holder {
+      max-height: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .pad {
+      margin: 0 auto;
+      width: 26rem;
+    }
+
+    .pad button {
+      padding: 5px;
+    }
   </style>
 </head>
 <body>
   <header class="main-header">
     <h1>Calculator</h1>
   </header>
+
+  <article>
+    <section>
+      <div class="pad-holder">
+        <div class="pad">
+          <button onclick="insertOnCode('0')">0</button>
+          <button onclick="insertOnCode('1')">1</button>
+          <button onclick="insertOnCode('2')">2</button>
+          <button onclick="insertOnCode('3')">3</button>
+          <button onclick="insertOnCode('4')">4</button>
+          <button onclick="insertOnCode('5')">5</button>
+          <button onclick="insertOnCode('6')">6</button>
+          <button onclick="insertOnCode('7')">7</button>
+          <button onclick="insertOnCode('8')">8</button>
+          <button onclick="insertOnCode('9')">9</button>
+          <button onclick="insertOnCode('+')">+</button>
+          <button onclick="insertOnCode('-')">-</button>
+          <button onclick="insertOnCode('*')">*</button>
+          <button onclick="insertOnCode('/')">/</button>
+          <button onclick="insertOnCode('(')">(</button>
+          <button onclick="insertOnCode(')')">)</button>
+          <button onclick="cleanCode()">C</button>
+        </div>
+      <div>
+    </section>
+  </article>
 
   <article>
     <section>
@@ -62,6 +102,20 @@
     const input = "5 + 5";
 
     code.value = input;
+
+    const insertOnCode = (value) => {
+      if (/\d/.test(value)) {
+        code.value += value;
+      } else {
+        code.value += ` ${value} `;
+      }
+    };
+    window.insertOnCode = insertOnCode;
+
+    const cleanCode = () => {
+      code.value = '';
+    };
+    window.cleanCode = cleanCode;
 
     const runCode = () => {
       let out = run(code.value);
